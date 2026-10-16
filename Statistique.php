@@ -1,5 +1,5 @@
 <?php
-session_start();
+
 
 require_once 'ensemble.php';
 
@@ -43,7 +43,7 @@ if (!isset($_SESSION["Etudiants"])) {
            
             <!-- Navigation -->
             <nav class="space-y-2">
-                <a href="Classes.php" class="flex items-center gap-3.5 px-4 py-3 text-slate-300 hover:bg-[#1A283B] hover:text-white font-bold text-sm rounded-xl transition">
+                <a href="Tableaudebord.php" class="flex items-center gap-3.5 px-4 py-3 text-slate-300 hover:bg-[#1A283B] hover:text-white font-bold text-sm rounded-xl transition">
                     <i class="fi fi-rr-apps text-base"></i>
                     <span>Tableau de bord</span>
                 </a>

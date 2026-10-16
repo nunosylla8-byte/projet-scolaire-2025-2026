@@ -1,5 +1,4 @@
 <?php
-session_start();
 
 require_once 'ensemble.php';
 
@@ -15,7 +14,7 @@ if (isset($_POST['ajout_etudiant'])) {
         "sexe"      => $_POST['sexe'],
     ];
     $_SESSION["Etudiants"][] = $Newetudiant;
-}
+} 
 ?>
 <!DOCTYPE html>
 <html lang="fr">
