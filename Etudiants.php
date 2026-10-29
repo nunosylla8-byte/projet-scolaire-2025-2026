@@ -12,6 +12,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $operation = $_POST["operation"] ?? "";
     $idOrigine = trim($_POST["id_origine"] ?? "");   // matricule avant modification
 
+    // ---------- ANNULER LA DERNIÈRE SUPPRESSION (bouton du toast) ----------
+    if ($operation === "annuler") {
+        if (annulerSuppression("Etudiants")) {
+            flash("Suppression annulée");
+        }
+        rediriger("Etudiants.php");
+    }
+
     // ---------- SUPPRIMER ----------
     if ($operation === "supprimer") {
         $matricule = trim($_POST["matricule"] ?? "");
@@ -21,8 +29,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             flash("Étudiant introuvable", "erreur");
         } else {
             $nomComplet = $_SESSION["Etudiants"][$i]["prenom"] . " " . $_SESSION["Etudiants"][$i]["nom"];
-            array_splice($_SESSION["Etudiants"], $i, 1);
-            flash($nomComplet . " a été supprimé(e)");
+            supprimerAvecAnnulation("Etudiants", $i);
+            flash($nomComplet . " a été supprimé(e)", "succes", true);
         }
         rediriger("Etudiants.php");
     }
@@ -118,24 +126,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 // =====================================================
-// 2. RECHERCHE ET FILTRES (GET)
+// 2. RECHERCHE ET FILTRE (GET)
 // =====================================================
-$q       = trim($_GET["q"] ?? "");
-$fClasse = trim($_GET["classe"] ?? "");
-$fSexe   = trim($_GET["sexe"] ?? "");
+$q     = trim($_GET["q"] ?? "");
+$sexeActif = trim($_GET["sexe"] ?? "");   // "" = Tous, "M", "F"
 
 $liste = [];
 foreach ($_SESSION["Etudiants"] as $etudiant) {
-    if ($fClasse !== "" && strcasecmp($etudiant["classe"], $fClasse) !== 0) { continue; }
-    if ($fSexe !== "" && $etudiant["sexe"] !== $fSexe) { continue; }
+    if ($sexeActif !== "" && $etudiant["sexe"] !== $sexeActif) { continue; }
     if ($q !== "") {
-        $texte = $etudiant["matricule"] . " " . $etudiant["nom"] . " " . $etudiant["prenom"];
-        if (mb_stripos($texte, $q) === false) { continue; }
+        $texte = $etudiant["nom"] . " " . $etudiant["prenom"] . " " . $etudiant["matricule"];
+        if (!contient($texte, $q)) { continue; }
     }
     $liste[] = $etudiant;
 }
-
-$filtreActif = ($q !== "" || $fClasse !== "" || $fSexe !== "");
 
 // =====================================================
 // 3. DONNÉES À AFFICHER
@@ -152,6 +156,10 @@ foreach ($_SESSION["Etudiants"] as $etudiant) {
     }
 }
 $prochainMatricule = "221-2025-" . str_pad($max + 1, 3, "0", STR_PAD_LEFT);
+
+// Styles des boutons Tous / Garçons / Filles
+$styleActif   = "bg-[#0B1728] text-white px-5 py-2.5 rounded-xl";
+$styleInactif = "bg-[#F1F5F9] text-slate-500 hover:bg-slate-200 px-5 py-2.5 rounded-xl transition";
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -176,11 +184,11 @@ $prochainMatricule = "221-2025-" . str_pad($max + 1, 3, "0", STR_PAD_LEFT);
 
     <?php include 'sidebar.php'; ?>
 
-    <main class="flex-1 ml-64 p-8">
+    <main class="flex-1 min-w-0 lg:ml-64 p-4 pt-20 sm:p-6 sm:pt-20 lg:p-8">
 
-        <header class="w-full flex justify-between items-center text-xs font-semibold mb-6">
+        <header class="w-full flex flex-wrap justify-between items-center gap-2 text-xs font-semibold mb-6">
             <div class="flex items-center gap-2 text-slate-500">
-                <span>École 221</span>
+                <span class="hover:underline cursor-pointer">École 221</span>
                 <span>/</span>
                 <span class="font-extrabold text-slate-800">Étudiants</span>
             </div>
@@ -190,114 +198,101 @@ $prochainMatricule = "221-2025-" . str_pad($max + 1, 3, "0", STR_PAD_LEFT);
             </div>
         </header>
 
-        <div class="flex justify-between items-center mb-6">
+        <!-- Titre + bouton "Nouvel étudiant" -->
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
             <div>
                 <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Étudiants</h1>
-                <p class="text-sm text-slate-500 font-semibold mt-1">
-                    <?php if ($filtreActif): ?>
-                        <?= count($liste) ?> résultat(s) sur <?= $total ?> étudiant(s)
-                    <?php else: ?>
-                        <?= $total ?> <?= $total > 1 ? "étudiants inscrits" : "étudiant inscrit" ?>
-                    <?php endif; ?>
-                </p>
+                <p class="text-sm text-slate-500 font-semibold mt-1"><?= $total ?> étudiants enregistrés</p>
             </div>
-            <button type="button" data-ouvrir-drawer class="bg-[#0B1728] hover:bg-[#1A283B] text-white px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition shadow-sm">
+            <button type="button" data-ouvrir-drawer class="bg-[#0B1728] hover:bg-[#1A283B] text-white px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm">
                 <i class="fi fi-rr-plus text-xs"></i>
                 <span>Nouvel étudiant</span>
             </button>
         </div>
 
-        <!-- Recherche et filtres : formulaire GET -->
-        <form method="GET" action="Etudiants.php" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-6 flex flex-wrap items-end gap-3">
-            <div class="flex-1 min-w-[200px]">
-                <label class="block text-xs font-bold text-slate-500 mb-1">Recherche</label>
-                <input type="text" name="q" value="<?= e($q) ?>" placeholder="Matricule, nom ou prénom" class="w-full border rounded-lg px-3 py-2 text-sm" />
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1">Classe</label>
-                <select name="classe" class="border rounded-lg px-3 py-2 text-sm bg-white">
-                    <option value="">Toutes</option>
-                    <?php foreach ($classes as $c): ?>
-                        <option value="<?= e($c["code"]) ?>" <?= strcasecmp($fClasse, $c["code"]) === 0 ? "selected" : "" ?>><?= e($c["nom"]) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1">Sexe</label>
-                <select name="sexe" class="border rounded-lg px-3 py-2 text-sm bg-white">
-                    <option value="">Tous</option>
-                    <option value="M" <?= $fSexe === "M" ? "selected" : "" ?>>Garçons</option>
-                    <option value="F" <?= $fSexe === "F" ? "selected" : "" ?>>Filles</option>
-                </select>
-            </div>
-            <button type="submit" class="bg-[#0B1728] hover:bg-[#1A283B] text-white px-5 py-2 rounded-lg font-bold text-sm">Filtrer</button>
-            <?php if ($filtreActif): ?>
-                <a href="Etudiants.php" class="text-sm font-bold text-slate-500 hover:text-slate-800 py-2">Réinitialiser</a>
-            <?php endif; ?>
-        </form>
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-4 sm:p-6">
 
-        <!-- Tableau des étudiants -->
-        <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            <!-- Recherche + filtres : formulaire GET (Entrée pour rechercher) -->
+            <form method="GET" action="Etudiants.php" class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                <!-- Bouton caché : fait que la touche Entrée garde le filtre actuel -->
+                <button type="submit" class="hidden" tabindex="-1" aria-hidden="true"></button>
+                <input type="hidden" name="sexe" value="<?= e($sexeActif) ?>">
+
+                <div class="w-full sm:w-2/3">
+                    <input name="q" type="text" value="<?= e($q) ?>" placeholder="Rechercher par nom, prénom ou matricule..." autocomplete="off" class="w-full bg-[#F8FAFC] border border-slate-200 text-xs font-bold text-slate-700 placeholder-slate-400 px-4 py-3 rounded-xl focus:outline-none focus:border-slate-400 transition">
+                </div>
+
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-start sm:justify-end text-xs font-bold">
+                    <button type="submit" name="sexe" value=""  class="<?= $sexeActif === ""  ? $styleActif : $styleInactif ?>">Tous</button>
+                    <button type="submit" name="sexe" value="M" class="<?= $sexeActif === "M" ? $styleActif : $styleInactif ?>">Garçons</button>
+                    <button type="submit" name="sexe" value="F" class="<?= $sexeActif === "F" ? $styleActif : $styleInactif ?>">Filles</button>
+                </div>
+            </form>
+
+            <!-- Tableau -->
             <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-[#F8FAFC] text-slate-500 text-xs uppercase tracking-wider">
-                        <tr>
-                            <th class="px-6 py-4 font-extrabold">Matricule</th>
-                            <th class="px-6 py-4 font-extrabold">Nom</th>
-                            <th class="px-6 py-4 font-extrabold">Prénom</th>
-                            <th class="px-6 py-4 font-extrabold">Sexe</th>
-                            <th class="px-6 py-4 font-extrabold">Classe</th>
-                            <th class="px-6 py-4 font-extrabold">Filière</th>
-                            <th class="px-6 py-4 font-extrabold">Niveau</th>
-                            <th class="px-6 py-4 font-extrabold text-right">Actions</th>
+                <table class="w-full min-w-[720px] text-left border-collapse">
+                    <thead>
+                        <tr class="text-[11px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                            <th class="py-3 px-4">MATRICULE</th>
+                            <th class="py-3 px-4">NOM</th>
+                            <th class="py-3 px-4">PRÉNOM</th>
+                            <th class="py-3 px-4 text-center">SEXE</th>
+                            <th class="py-3 px-4">CLASSE</th>
+                            <th class="py-3 px-4">FILIÈRE</th>
+                            <th class="py-3 px-4">NIVEAU</th>
+                            <th class="py-3 px-4 text-center">ACTION</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100">
+                    <tbody class="divide-y divide-slate-100 text-xs font-bold text-slate-700">
 
                         <?php if (empty($liste)): ?>
-                            <tr>
-                                <td colspan="8" class="px-6 py-12 text-center text-slate-400 font-bold">
-                                    <?= $filtreActif ? "Aucun étudiant ne correspond à votre recherche" : "Aucun étudiant enregistré" ?>
-                                </td>
-                            </tr>
+                            <tr><td colspan="8" class="py-10 text-center text-slate-400 font-bold">Aucun étudiant trouvé</td></tr>
                         <?php endif; ?>
 
                         <?php foreach ($liste as $et): ?>
                             <?php $infos = infosEtudiant($et); ?>
-                            <tr class="hover:bg-slate-50 transition">
-                                <td class="px-6 py-4 font-bold text-slate-700"><?= e($et["matricule"]) ?></td>
-                                <td class="px-6 py-4 font-extrabold text-slate-900"><?= e($et["nom"]) ?></td>
-                                <td class="px-6 py-4 font-semibold text-slate-700"><?= e($et["prenom"]) ?></td>
-                                <td class="px-6 py-4">
+                            <tr class="hover:bg-slate-50/50 transition">
+                                <td class="py-4 px-4 font-bold text-slate-500"><?= e($et["matricule"]) ?></td>
+                                <td class="py-4 px-4 font-black text-slate-900"><?= e($et["nom"]) ?></td>
+                                <td class="py-4 px-4 font-bold text-slate-700"><?= e($et["prenom"]) ?></td>
+                                <td class="py-4 px-4 text-center">
                                     <?php if ($et["sexe"] === "M"): ?>
-                                        <span class="bg-sky-100 text-sky-600 font-black text-xs px-3 py-1 rounded-full">M</span>
+                                        <span class="w-6 h-6 rounded-full bg-sky-100 text-sky-600 font-extrabold text-[11px] inline-flex items-center justify-center">M</span>
+                                    <?php elseif ($et["sexe"] === "F"): ?>
+                                        <span class="w-6 h-6 rounded-full bg-pink-100 text-pink-600 font-extrabold text-[11px] inline-flex items-center justify-center">F</span>
                                     <?php else: ?>
-                                        <span class="bg-pink-100 text-pink-600 font-black text-xs px-3 py-1 rounded-full">F</span>
+                                        <span class="text-slate-300">—</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="px-6 py-4 font-semibold text-slate-700"><?= e($infos["classe"]) ?></td>
-                                <td class="px-6 py-4 font-bold text-slate-700"><?= e($infos["filiere"]) ?></td>
-                                <td class="px-6 py-4 font-bold text-slate-700"><?= e($infos["niveau"]) ?></td>
-                                <td class="px-6 py-4">
-                                    <div class="flex justify-end items-center gap-3">
-                                        <button type="button" data-item="<?= e(json_encode($et, JSON_UNESCAPED_UNICODE)) ?>" class="btn-modif text-slate-400 hover:text-sky-600 transition" title="Modifier">
-                                            <i class="fi fi-rr-pencil text-base pointer-events-none"></i>
-                                        </button>
+                                <td class="py-4 px-4 font-bold text-slate-700"><?= e($infos["classe"]) ?></td>
+                                <td class="py-4 px-4">
+                                    <span class="bg-slate-100 text-slate-700 font-extrabold text-[10px] px-2.5 py-1 rounded-md"><?= e($infos["filiere"]) ?></span>
+                                </td>
+                                <td class="py-4 px-4 font-extrabold text-slate-500"><?= e($infos["niveau"]) ?></td>
+                                <td class="py-4 px-4 text-center whitespace-nowrap">
+                                    <button type="button" data-item="<?= e(json_encode($et, JSON_UNESCAPED_UNICODE)) ?>" class="btn-modif text-slate-400 hover:text-sky-600 transition mr-3" title="Modifier">
+                                        <i class="fi fi-rr-pencil text-base pointer-events-none"></i>
+                                    </button>
 
-                                        <form method="POST" action="Etudiants.php" class="form-suppr" data-message="Voulez-vous supprimer l'étudiant « <?= e($et["prenom"] . " " . $et["nom"]) ?> » ?">
-                                            <input type="hidden" name="operation" value="supprimer">
-                                            <input type="hidden" name="matricule" value="<?= e($et["matricule"]) ?>">
-                                            <button type="submit" class="text-slate-400 hover:text-red-600 transition" title="Supprimer">
-                                                <i class="fi fi-rr-trash text-base pointer-events-none"></i>
-                                            </button>
-                                        </form>
-                                    </div>
+                                    <form method="POST" action="Etudiants.php" class="form-suppr inline" data-message="Voulez-vous supprimer l'étudiant « <?= e($et["prenom"] . " " . $et["nom"]) ?> » ?">
+                                        <input type="hidden" name="operation" value="supprimer">
+                                        <input type="hidden" name="matricule" value="<?= e($et["matricule"]) ?>">
+                                        <button type="submit" class="text-slate-400 hover:text-red-600 transition" title="Supprimer">
+                                            <i class="fi fi-rr-trash text-base pointer-events-none"></i>
+                                        </button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
 
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Compteur sous le tableau -->
+            <div class="mt-6 text-xs font-bold text-slate-400">
+                <?= count($liste) ?> résultats sur <?= $total ?> étudiants
             </div>
         </div>
     </main>
@@ -328,7 +323,7 @@ $prochainMatricule = "221-2025-" . str_pad($max + 1, 3, "0", STR_PAD_LEFT);
                     <p class="erreur <?= isset($erreurs["matricule"]) ? "" : "hidden" ?> text-sm text-red-600 mt-1"><?= e($erreurs["matricule"] ?? "") ?></p>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-bold mb-1">Nom</label>
                         <input name="nom" type="text" class="w-full border rounded-lg px-3 py-2" />
@@ -341,7 +336,7 @@ $prochainMatricule = "221-2025-" . str_pad($max + 1, 3, "0", STR_PAD_LEFT);
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-bold mb-1">Date de naissance</label>
                         <input name="date_naissance" type="date" max="<?= date("Y-m-d") ?>" class="w-full border rounded-lg px-3 py-2" />

@@ -1,6 +1,15 @@
 <?php
 session_start();
 
+// Numéro de version des données.
+// Si la session contient des données d'une ancienne version du projet,
+// on les efface pour repartir proprement (évite les erreurs "Undefined array key").
+define("VERSION_DONNEES", 2);
+if (($_SESSION["version_donnees"] ?? 0) !== VERSION_DONNEES) {
+    unset($_SESSION["Filieres"], $_SESSION["Niveaux"], $_SESSION["Classes"], $_SESSION["Etudiants"], $_SESSION["flash"], $_SESSION["corbeille"]);
+    $_SESSION["version_donnees"] = VERSION_DONNEES;
+}
+
 /* =====================================================
    1. DONNÉES DE DÉPART (créées une seule fois dans la session)
    ===================================================== */
@@ -18,9 +27,9 @@ if (!isset($_SESSION["Niveaux"])) {
     $_SESSION["Niveaux"] = [
         ["code" => "L1", "libelle" => "Licence 1", "bg_badge" => "bg-sky-100",     "text_badge" => "text-sky-600"],
         ["code" => "L2", "libelle" => "Licence 2", "bg_badge" => "bg-emerald-100", "text_badge" => "text-emerald-600"],
-        ["code" => "L3", "libelle" => "Licence 3", "bg_badge" => "bg-amber-100",   "text_badge" => "text-amber-600"],
-        ["code" => "M1", "libelle" => "Master 1",  "bg_badge" => "bg-purple-100",  "text_badge" => "text-purple-600"],
-        ["code" => "M2", "libelle" => "Master 2",  "bg_badge" => "bg-rose-100",    "text_badge" => "text-rose-600"],
+        ["code" => "L3", "libelle" => "Licence 3", "bg_badge" => "bg-orange-100",  "text_badge" => "text-orange-600"],
+        ["code" => "M1", "libelle" => "Master 1",  "bg_badge" => "bg-violet-100",  "text_badge" => "text-violet-600"],
+        ["code" => "M2", "libelle" => "Master 2",  "bg_badge" => "bg-pink-100",    "text_badge" => "text-pink-600"],
     ];
 }
 
@@ -92,8 +101,8 @@ function trouver($liste, $cle, $valeur) {
    3. MESSAGES FLASH (affichés dans le toast après une redirection)
    ===================================================== */
 
-function flash($message, $type = "succes") {
-    $_SESSION["flash"] = ["message" => $message, "type" => $type];
+function flash($message, $type = "succes", $annuler = false) {
+    $_SESSION["flash"] = ["message" => $message, "type" => $type, "annuler" => $annuler];
 }
 
 // Lit le message puis l'efface (il ne s'affiche qu'une fois)
@@ -101,6 +110,41 @@ function lireFlash() {
     $f = $_SESSION["flash"] ?? null;
     unset($_SESSION["flash"]);
     return $f;
+}
+
+
+/* =====================================================
+   3 bis. SUPPRESSION AVEC BOUTON "ANNULER" (affiché dans le toast)
+   ===================================================== */
+
+// Retire un élément d'une liste en le gardant de côté dans la "corbeille"
+function supprimerAvecAnnulation($nomListe, $index) {
+    $_SESSION["corbeille"] = [
+        "liste"    => $nomListe,
+        "position" => $index,
+        "element"  => $_SESSION[$nomListe][$index],
+    ];
+    array_splice($_SESSION[$nomListe], $index, 1);
+}
+
+// Remet le dernier élément supprimé à sa place (retourne true si c'est fait)
+function annulerSuppression($nomListe) {
+    $c = $_SESSION["corbeille"] ?? null;
+    unset($_SESSION["corbeille"]);
+
+    if ($c && $c["liste"] === $nomListe) {
+        array_splice($_SESSION[$nomListe], $c["position"], 0, [$c["element"]]);
+        return true;
+    }
+    return false;
+}
+
+// Recherche d'un texte dans un autre, sans tenir compte des majuscules
+function contient($texte, $terme) {
+    if (function_exists("mb_stripos")) {
+        return mb_stripos($texte, $terme) !== false;
+    }
+    return stripos($texte, $terme) !== false;
 }
 
 

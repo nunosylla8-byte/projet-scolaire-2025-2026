@@ -12,6 +12,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $operation = $_POST["operation"] ?? "";
     $idOrigine = trim($_POST["id_origine"] ?? "");   // code de la filière avant modification
 
+    // ---------- ANNULER LA DERNIÈRE SUPPRESSION (bouton du toast) ----------
+    if ($operation === "annuler") {
+        if (annulerSuppression("Filieres")) {
+            flash("Suppression annulée");
+        }
+        rediriger("Filieres.php");
+    }
+
     // ---------- SUPPRIMER ----------
     if ($operation === "supprimer") {
         $code = trim($_POST["code"] ?? "");
@@ -24,8 +32,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             flash("Impossible : cette filière contient encore des classes", "erreur");
         } else {
             $nom = $_SESSION["Filieres"][$i]["nom"];
-            array_splice($_SESSION["Filieres"], $i, 1);
-            flash("« " . $nom . " » a été supprimée");
+            supprimerAvecAnnulation("Filieres", $i);
+            flash("« " . $nom . " » a été supprimée", "succes", true);
         }
         rediriger("Filieres.php");
     }
@@ -113,9 +121,9 @@ $flash    = lireFlash();
     <?php include 'sidebar.php'; ?>
 
     <!-- ==================== CONTENU PRINCIPAL ==================== -->
-    <main class="flex-1 ml-64 p-8">
+    <main class="flex-1 min-w-0 lg:ml-64 p-4 pt-20 sm:p-6 sm:pt-20 lg:p-8">
 
-        <header class="w-full flex justify-between items-center text-xs font-semibold mb-6">
+        <header class="w-full flex flex-wrap justify-between items-center gap-2 text-xs font-semibold mb-6">
             <div class="flex items-center gap-2 text-slate-500">
                 <span>École 221</span>
                 <span>/</span>
@@ -128,21 +136,21 @@ $flash    = lireFlash();
         </header>
 
         <!-- Titre + bouton "Nouvelle filière" -->
-        <div class="flex justify-between items-center mb-8">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
             <div>
                 <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Filières</h1>
                 <p class="text-sm text-slate-500 font-semibold mt-1">
                     <?= $total ?> <?= $total > 1 ? "filières enregistrées" : "filière enregistrée" ?>
                 </p>
             </div>
-            <button type="button" data-ouvrir-drawer class="bg-[#0B1728] hover:bg-[#1A283B] text-white px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition shadow-sm">
+            <button type="button" data-ouvrir-drawer class="bg-[#0B1728] hover:bg-[#1A283B] text-white px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm">
                 <i class="fi fi-rr-plus text-xs"></i>
                 <span>Nouvelle filière</span>
             </button>
         </div>
 
         <!-- Grille des cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
 
             <?php if (empty($filieres)): ?>
                 <p class="col-span-full text-center text-slate-400 font-bold py-16">Aucune filière enregistrée</p>

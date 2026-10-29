@@ -31,8 +31,13 @@ $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APO
     </div>
 </div>
 
+<!-- Formulaire envoyé par le bouton "Annuler" du toast (annule la dernière suppression) -->
+<form id="form-annuler" method="POST" class="hidden">
+    <input type="hidden" name="operation" value="annuler">
+</form>
+
 <!-- Toast (message en bas à droite) -->
-<div id="toast" class="fixed bottom-6 right-6 translate-y-4 opacity-0 pointer-events-none transition-all duration-300 z-[80] px-5 py-3 rounded-lg font-bold text-sm text-white flex items-center gap-3 shadow-lg"></div>
+<div id="toast" class="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 max-w-[calc(100vw-2rem)] translate-y-4 opacity-0 pointer-events-none transition-all duration-300 z-[80] px-5 py-3 rounded-lg font-bold text-sm text-white flex items-center gap-3 shadow-lg"></div>
 
 <script>
 // Ce script gère uniquement l'AFFICHAGE.
@@ -47,7 +52,11 @@ const form    = document.getElementById("formulaire");
 // ---------- TOAST ----------
 let minuteurToast;
 
-function toast(message, erreur = false) {
+function cacherToast() {
+    toastEl.classList.add("opacity-0", "translate-y-4", "pointer-events-none");
+}
+
+function toast(message, erreur = false, avecAnnuler = false) {
     toastEl.innerHTML = "";
 
     const icone = document.createElement("i");
@@ -57,14 +66,23 @@ function toast(message, erreur = false) {
     texte.textContent = message;
 
     toastEl.append(icone, texte);
+
+    // Bouton "Annuler" : envoie le formulaire caché, PHP remet l'élément supprimé
+    if (avecAnnuler) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = "Annuler";
+        b.className = "ml-2 px-3 py-1 rounded bg-white/20 hover:bg-white/30 text-xs font-extrabold";
+        b.addEventListener("click", () => document.getElementById("form-annuler").submit());
+        toastEl.append(b);
+    }
+
     toastEl.classList.toggle("bg-red-600", erreur);
     toastEl.classList.toggle("bg-emerald-600", !erreur);
     toastEl.classList.remove("opacity-0", "translate-y-4", "pointer-events-none");
 
     clearTimeout(minuteurToast);
-    minuteurToast = setTimeout(() => {
-        toastEl.classList.add("opacity-0", "translate-y-4", "pointer-events-none");
-    }, 3000);
+    minuteurToast = setTimeout(cacherToast, avecAnnuler ? 5000 : 2500);
 }
 
 // ---------- MODAL DE CONFIRMATION ----------
@@ -149,7 +167,7 @@ document.addEventListener("keydown", ev => {
 
 // ---------- AU CHARGEMENT DE LA PAGE ----------
 <?php if ($flash): ?>
-toast(<?= json_encode($flash["message"], $jsonFlags) ?>, <?= $flash["type"] === "erreur" ? "true" : "false" ?>);
+toast(<?= json_encode($flash["message"], $jsonFlags) ?>, <?= $flash["type"] === "erreur" ? "true" : "false" ?>, <?= !empty($flash["annuler"]) ? "true" : "false" ?>);
 <?php endif; ?>
 
 <?php if ($reouvrir): ?>

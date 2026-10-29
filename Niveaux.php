@@ -4,15 +4,15 @@ require_once 'ensemble.php';
 $erreurs  = [];
 $reouvrir = null;
 
-// Couleurs proposées automatiquement aux nouveaux niveaux
-$palette = [
-    ["bg-sky-100",     "text-sky-600"],
-    ["bg-emerald-100", "text-emerald-600"],
-    ["bg-amber-100",   "text-amber-600"],
-    ["bg-purple-100",  "text-purple-600"],
-    ["bg-rose-100",    "text-rose-600"],
-    ["bg-teal-100",    "text-teal-600"],
-    ["bg-indigo-100",  "text-indigo-600"],
+// Couleurs proposées pour le badge : [nom affiché, fond, texte]
+$COULEURS = [
+    ["Bleu",   "bg-sky-100",     "text-sky-600"],
+    ["Vert",   "bg-emerald-100", "text-emerald-600"],
+    ["Violet", "bg-violet-100",  "text-violet-600"],
+    ["Orange", "bg-orange-100",  "text-orange-600"],
+    ["Rose",   "bg-pink-100",    "text-pink-600"],
+    ["Jaune",  "bg-yellow-100",  "text-yellow-700"],
+    ["Rouge",  "bg-red-100",     "text-red-600"],
 ];
 
 // =====================================================
@@ -22,6 +22,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $operation = $_POST["operation"] ?? "";
     $idOrigine = trim($_POST["id_origine"] ?? "");
+
+    // ---------- ANNULER LA DERNIÈRE SUPPRESSION (bouton du toast) ----------
+    if ($operation === "annuler") {
+        if (annulerSuppression("Niveaux")) {
+            flash("Suppression annulée");
+        }
+        rediriger("Niveaux.php");
+    }
 
     // ---------- SUPPRIMER ----------
     if ($operation === "supprimer") {
@@ -35,16 +43,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             flash("Impossible : ce niveau contient encore des classes", "erreur");
         } else {
             $libelle = $_SESSION["Niveaux"][$i]["libelle"];
-            array_splice($_SESSION["Niveaux"], $i, 1);
-            flash("« " . $libelle . " » a été supprimé");
+            supprimerAvecAnnulation("Niveaux", $i);
+            flash("« " . $libelle . " » a été supprimé", "succes", true);
         }
         rediriger("Niveaux.php");
     }
 
     // ---------- AJOUTER / MODIFIER ----------
+    $couleur = (int)($_POST["couleur"] ?? 0);
+    if ($couleur < 0 || $couleur >= count($COULEURS)) {
+        $couleur = 0;
+    }
+
     $donnees = [
         "code"    => strtoupper(trim($_POST["code"] ?? "")),
         "libelle" => trim($_POST["libelle"] ?? ""),
+        "couleur" => $couleur,
     ];
 
     if ($donnees["code"] === "")    { $erreurs["code"]    = "Ce champ est obligatoire"; }
@@ -58,41 +72,33 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 
     if (empty($erreurs)) {
+        $niveau = [
+            "code"       => $donnees["code"],
+            "libelle"    => $donnees["libelle"],
+            "bg_badge"   => $COULEURS[$couleur][1],
+            "text_badge" => $COULEURS[$couleur][2],
+        ];
+
         if ($operation === "modifier") {
             if ($indexOrigine < 0) {
                 flash("Niveau introuvable", "erreur");
             } else {
-                $ancien     = $_SESSION["Niveaux"][$indexOrigine];
-                $ancienCode = $ancien["code"];
-
-                // On garde les couleurs du niveau, on change seulement code et libellé
-                $_SESSION["Niveaux"][$indexOrigine] = [
-                    "code"       => $donnees["code"],
-                    "libelle"    => $donnees["libelle"],
-                    "bg_badge"   => $ancien["bg_badge"],
-                    "text_badge" => $ancien["text_badge"],
-                ];
+                $ancienCode = $_SESSION["Niveaux"][$indexOrigine]["code"];
+                $_SESSION["Niveaux"][$indexOrigine] = $niveau;
 
                 // Si le code change, on met à jour les classes qui l'utilisent
-                if (strcasecmp($ancienCode, $donnees["code"]) !== 0) {
+                if (strcasecmp($ancienCode, $niveau["code"]) !== 0) {
                     foreach ($_SESSION["Classes"] as $k => $classe) {
                         if (strcasecmp($classe["niveau"], $ancienCode) === 0) {
-                            $_SESSION["Classes"][$k]["niveau"] = $donnees["code"];
+                            $_SESSION["Classes"][$k]["niveau"] = $niveau["code"];
                         }
                     }
                 }
-                flash("« " . $donnees["libelle"] . " » a été modifié");
+                flash("« " . $niveau["libelle"] . " » a été modifié");
             }
         } else {
-            // Couleur choisie selon le nombre de niveaux déjà créés
-            $couleur = $palette[count($_SESSION["Niveaux"]) % count($palette)];
-            $_SESSION["Niveaux"][] = [
-                "code"       => $donnees["code"],
-                "libelle"    => $donnees["libelle"],
-                "bg_badge"   => $couleur[0],
-                "text_badge" => $couleur[1],
-            ];
-            flash("« " . $donnees["libelle"] . " » a été ajouté");
+            $_SESSION["Niveaux"][] = $niveau;
+            flash("« " . $niveau["libelle"] . " » a été ajouté");
         }
         rediriger("Niveaux.php");
     }
@@ -133,11 +139,11 @@ $flash   = lireFlash();
 
     <?php include 'sidebar.php'; ?>
 
-    <main class="flex-1 ml-64 p-8">
+    <main class="flex-1 min-w-0 lg:ml-64 p-4 pt-20 sm:p-6 sm:pt-20 lg:p-8">
 
-        <header class="w-full flex justify-between items-center text-xs font-semibold mb-6">
+        <header class="w-full flex flex-wrap justify-between items-center gap-2 text-xs font-semibold mb-6">
             <div class="flex items-center gap-2 text-slate-500">
-                <span>École 221</span>
+                <span class="hover:underline cursor-pointer">École 221</span>
                 <span>/</span>
                 <span class="font-extrabold text-slate-800">Niveaux</span>
             </div>
@@ -147,20 +153,22 @@ $flash   = lireFlash();
             </div>
         </header>
 
-        <div class="flex justify-between items-center mb-8">
+        <!-- Titre + bouton "Nouveau niveau" -->
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
             <div>
                 <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Niveaux</h1>
                 <p class="text-sm text-slate-500 font-semibold mt-1">
                     <?= $total ?> <?= $total > 1 ? "niveaux enregistrés" : "niveau enregistré" ?>
                 </p>
             </div>
-            <button type="button" data-ouvrir-drawer class="bg-[#0B1728] hover:bg-[#1A283B] text-white px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition shadow-sm">
+            <button type="button" data-ouvrir-drawer class="bg-[#0B1728] hover:bg-[#1A283B] text-white px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm">
                 <i class="fi fi-rr-plus text-xs"></i>
                 <span>Nouveau niveau</span>
             </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Grille des cartes -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5">
 
             <?php if (empty($niveaux)): ?>
                 <p class="col-span-full text-center text-slate-400 font-bold py-16">Aucun niveau enregistré</p>
@@ -168,26 +176,24 @@ $flash   = lireFlash();
 
             <?php foreach ($niveaux as $n): ?>
                 <?php
-                    $nbClasses   = nbClassesDeNiveau($n["code"]);
-                    $nbEtudiants = nbEtudiantsDeNiveau($n["code"]);
+                    $nb = nbClassesDeNiveau($n["code"]);
+
+                    // Position de la couleur dans la liste (pour pré-sélectionner le choix en modification)
+                    $indexCouleur = 0;
+                    foreach ($COULEURS as $k => $c) {
+                        if ($c[1] === $n["bg_badge"]) { $indexCouleur = $k; }
+                    }
+                    $item = $n + ["couleur" => $indexCouleur];
                 ?>
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                    <div>
-                        <div class="flex justify-between items-center mb-5 gap-2">
-                            <span class="<?= e($n["bg_badge"]) ?> <?= e($n["text_badge"]) ?> font-black text-sm px-4 py-2 rounded-xl tracking-wider uppercase"><?= e($n["code"]) ?></span>
-                            <span class="bg-[#F0F5FD] text-[#475569] font-bold text-xs px-3 py-1 rounded-full">
-                                <?= $nbClasses ?> <?= $nbClasses > 1 ? "classes" : "classe" ?>
-                            </span>
-                        </div>
-
-                        <h2 class="text-xl font-extrabold text-slate-900 leading-snug"><?= e($n["libelle"]) ?></h2>
-                        <p class="text-sm text-slate-400 font-semibold mt-1">
-                            <?= $nbEtudiants ?> <?= $nbEtudiants > 1 ? "étudiants" : "étudiant" ?>
-                        </p>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
+                    <div class="w-16 h-16 rounded-2xl <?= e($n["bg_badge"]) ?> <?= e($n["text_badge"]) ?> flex items-center justify-center font-black text-xl mb-4">
+                        <?= e($n["code"]) ?>
                     </div>
+                    <h2 class="text-lg font-extrabold text-slate-900 mb-1"><?= e($n["libelle"]) ?></h2>
+                    <p class="text-xs font-semibold text-slate-400"><?= $nb ?> <?= $nb > 1 ? "classes" : "classe" ?></p>
 
-                    <div class="flex justify-end items-center mt-4 pt-3 border-t border-slate-100">
-                        <button type="button" data-item="<?= e(json_encode($n, JSON_UNESCAPED_UNICODE)) ?>" class="btn-modif text-slate-400 hover:text-sky-600 transition mr-3" title="Modifier">
+                    <div class="mt-4 pt-3 border-t border-slate-100 w-full flex justify-center gap-4">
+                        <button type="button" data-item="<?= e(json_encode($item, JSON_UNESCAPED_UNICODE)) ?>" class="btn-modif text-slate-400 hover:text-sky-600 transition" title="Modifier">
                             <i class="fi fi-rr-pencil text-base pointer-events-none"></i>
                         </button>
 
@@ -226,15 +232,24 @@ $flash   = lireFlash();
             <div class="flex-1 overflow-y-auto p-4 space-y-4">
 
                 <div>
-                    <label class="block text-sm font-bold mb-1">Code <span class="text-slate-400 font-semibold">(ex : L1, M2)</span></label>
+                    <label class="block text-sm font-bold mb-1">Code (ex : L1, M2)</label>
                     <input name="code" type="text" class="w-full border rounded-lg px-3 py-2" />
                     <p class="erreur <?= isset($erreurs["code"]) ? "" : "hidden" ?> text-sm text-red-600 mt-1"><?= e($erreurs["code"] ?? "") ?></p>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-bold mb-1">Libellé <span class="text-slate-400 font-semibold">(ex : Licence 1)</span></label>
+                    <label class="block text-sm font-bold mb-1">Libellé (ex : Licence 1)</label>
                     <input name="libelle" type="text" class="w-full border rounded-lg px-3 py-2" />
                     <p class="erreur <?= isset($erreurs["libelle"]) ? "" : "hidden" ?> text-sm text-red-600 mt-1"><?= e($erreurs["libelle"] ?? "") ?></p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold mb-1">Couleur du badge</label>
+                    <select name="couleur" class="w-full border rounded-lg px-3 py-2">
+                        <?php foreach ($COULEURS as $k => $c): ?>
+                            <option value="<?= $k ?>"><?= e($c[0]) ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
             </div>
 
